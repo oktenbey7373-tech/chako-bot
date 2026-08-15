@@ -56,3 +56,4 @@ if __name__ == "__main__":
         run_chako_ai_agent()
         print("Analiz tamamlandı, sonraki döngü için 60 saniye bekleniyor...\n")
         time.sleep(60)
+       
