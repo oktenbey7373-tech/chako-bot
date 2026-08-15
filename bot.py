@@ -24,13 +24,11 @@ def send_telegram_message(message, reply_markup=None):
     except Exception as e:
         print(f"Telegram mesaj hatası: {e}")
 
-def btc_turk_trade(pair, order_type, price, amount):
+def btc_turk_trade(pair, order_type, price):
     """
     BtcTurk Gerçek Alım/Satım Emir Fonksiyonu (0: Buy, 1: Sell)
     """
     url = "https://api.btcturk.com/api/v2/order"
-    
-    # BtcTurk API İmza Hesaplama Mantığı
     nonce = str(int(time.time() * 1000))
     message = f"{API_KEY}{nonce}".encode('utf-8')
     decoded_secret = base64.b64decode(SECRET_KEY)
@@ -44,13 +42,14 @@ def btc_turk_trade(pair, order_type, price, amount):
         'Content-Type': 'application/json'
     }
 
+    # Güvenli test miktarı veya bakiye oranı
     payload = {
-        "quantity": str(amount),
+        "quantity": "0.001", # Örnek minimum miktar, ihtiyaca göre ayarlanabilir
         "price": str(price),
         "stopPrice": "0",
-        "newOrderMethod": "market", # Piyasa fiyatından hızlı işlem
+        "newOrderMethod": "market",
         "pairSymbol": pair,
-        "orderType": str(order_type), # 0: Buy (Alış), 1: Sell (Satış)
+        "orderType": str(order_type), # 0: Alış, 1: Satış
         "orderMethod": "limit"
     }
 
@@ -75,15 +74,10 @@ def get_market_data():
                 if pair.endswith("_TRY"):
                     try:
                         last = float(ticker.get("last", 0))
-                        high = float(ticker.get("high", 0))
-                        low = float(ticker.get("low", 0))
                         daily_percent = float(ticker.get("dailyPercent", 0))
-                        
                         coin_list.append({
                             "pair": pair,
                             "last_price": last,
-                            "high": high,
-                            "low": low,
                             "daily_percent": daily_percent
                         })
                     except (ValueError, TypeError):
@@ -94,42 +88,47 @@ def get_market_data():
     return []
 
 def run_chako_ai_agent():
-    print("CHAKO AI Piyasa Taraması Başlatıldı...")
+    print("CHAKO AI Piyasa Analizi Yapılıyor...")
     markets = get_market_data()
     
     if not markets:
         print("Piyasa verisi alınamadı.")
-        # Test amaçlı Telegram'ın çalıştığını görmek için ilk coini test mesajı atalım
-        send_telegram_message("🤖 *CHAKO AI Aktif*: Sistem çalışıyor, piyasalar taranıyor...")
         return
 
-    # Test ve gözlem için ilk aşamada eşiği biraz esnetelim ki hemen mesaj alabilelim
     for coin in markets:
         pair = coin["pair"]
         last_price = coin["last_price"]
         daily_percent = coin["daily_percent"]
 
-        # Örnek olarak BTC veya hareketli bir coin yakalayalım
-        if abs(daily_percent) > 0.5: # Eşiği şimdilik esnettik ki test edebilesin
-            ai_signal = "🚀 ALIM FIRSATI TESPİT EDİLDİ" if daily_percent > 0 else "🛡️ SATIş BASKISI"
+        # Hareketli bir coin tespit edildiğinde onay butonlarıyla birlikte Telegram'a atar
+        if abs(daily_percent) > 0.5:
+            signal_type = "ALIM" if daily_percent > 0 else "SATIŞ"
             
             msg = (
-                f"🧠 *CHAKO AI Otonom Sinyal*\n\n"
+                f"🧠 *CHAKO AI Otonom Onay Masası*\n\n"
                 f"🔤 Parite: `{pair}`\n"
                 f"💰 Güncel Fiyat: `{last_price:,.2f}` TL\n"
                 f"📈 24s Değişim: `% {daily_percent}`\n"
-                f"🤖 Durum: *{ai_signal}*\n\n"
-                f"👉 *İşlem yapmak için aşağıdaki onay butonunu kullanabilirsin.*"
+                f"🤖 Öneri: *{signal_type} Fırsatı Tespit Edildi!*\n\n"
+                f"👇 *İşlemi gerçekleştirmek için aşağıdaki onay butonunu kullanabilirsin:*"
             )
 
-            # Butona basıldığında doğrudan borsa üzerinden işlem açabilmesi için altyapı hazırlandı
-            # Otomatik test için bu döngüde ilk gördüğü fırsatı Telegram'a atacak
-            send_telegram_message(msg)
-            break # Sadece ilkini atıp spam olmasını önleyelim
+            # İnteraktif Onay Butonları Ekleniyor
+            order_code = 0 if daily_percent > 0 else 1
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": f"✅ {pair} İÇİN ONAYLA VE İŞLEM YAP", "callback_data": f"trade_{pair}_{order_code}_{last_price}"}
+                    ]
+                ]
+            }
+
+            send_telegram_message(msg, reply_markup=keyboard)
+            break # Spam olmaması için ilk fırsatı iletip döngüyü beklemeye alıyoruz
 
 if __name__ == "__main__":
-    print("CHAKO AI Broker Bot Başlatıldı...")
+    print("CHAKO AI Broker Bot Tam Otonom Modda Başlatıldı...")
     while True:
         run_chako_ai_agent()
-        print("Döngü tamamlandı, 5 dakika bekleniyor...\n")
+        print("Tarama tamamlandı, sonraki kontrol için 5 dakika bekleniyor...\n")
         time.sleep(300)
