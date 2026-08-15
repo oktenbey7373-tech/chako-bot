@@ -5,18 +5,19 @@ TOKEN = "8732581183:AAgKyg2vS07HaGqTWcVHX0zkr50KePf600"
 CHAT_ID = "975223951"
 API_KEY = "5a91cad3-42c8-43f6-b5fa-de1ec872c6a9"
 SECRET_KEY = "cOw1PL/gp6C2t59JAGZ1XQ9Aq5YfC"
-def send_telegram_message(message):
+def send_telegram_message(message, reply_markup=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
         "text": message,
         "parse_mode": "Markdown"
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         requests.post(url, json=payload)
     except Exception as e:
         print(f"Telegram mesaj hatası: {e}")
-
 def get_market_data():
     url = "https://api.btcturk.com/api/v2/ticker"
     try:
@@ -42,15 +43,19 @@ def run_chako_ai_agent():
         daily_percent = market["daily_percent"]
         
         # CHAKO AI Gelişmiş Karar Mekanizması
-        if daily_percent > 2.0:
-            ai_signal = "🟢 GÜÇLÜ AL (Yüksek Momentum)"
-            strategy = "Boğa sezonu iştahı yüksek, direnç seviyeleri takip edilmeli."
-        elif daily_percent < -2.0:
-            ai_signal = "🔴 DİKKAT / SATIŞ BASKISI"
-            strategy = "Destek noktaları test ediliyor, kademeli alım bölgesi kollanabilir."
-        else:
-            ai_signal = "🟡 NÖTR / KONSOLİDASYON"
-            strategy = "Piyasa yatay seyirde, balina hareketleri bekleniyor."
+        # CHAKO AI Gelişmiş Karar Mekanizması
+    if daily_percent > 2.0:
+        ai_signal = "✅ GÜÇLÜ AL (Yüksek Momentum)"
+        strategy = "Boğa sezonu iştahı yüksek, direnç seviyeleri takip edilmeli."
+        keyboard = {"inline_keyboard": [[{"text": "🚀 AL ONAYI", "callback_data": "buy"}]]}
+    elif daily_percent < -2.0:
+        ai_signal = "❌ DİKKAT / SATIŞ BASKISI"
+        strategy = "Destek noktaları test ediliyor, kademeli alım bölgesi kullanılabilir."
+        keyboard = {"inline_keyboard": [[{"text": "🛡️ SAT ONAYI", "callback_data": "sell"}]]}
+    else:
+        ai_signal = "⚖️ NÖTR / KONSOLİDASYON"
+        strategy = "Piyasa yatay seyirde, balina hareketleri bekleniyor."
+        keyboard = None
             
         msg = (
             f"🤖 *CHAKO AI Agent Akıllı Raporu*\n\n"
@@ -62,7 +67,7 @@ def run_chako_ai_agent():
             f"💡 Strateji Notu: _{strategy}_\n"
             f"⚡ *Sistem Durumu: Aktif (7/24 İzleniyor)*"
         )
-        send_telegram_message(msg)
+        send_telegram_message(msg, reply_markup=keyboard)
         print("AI Agent akıllı analizi Telegram'a gönderildi.")
 
 if __name__ == "__main__":
