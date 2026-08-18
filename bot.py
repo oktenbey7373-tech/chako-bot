@@ -11,9 +11,27 @@ from threading import Thread
 load_dotenv()
 app = Flask(__name__)
 
-# BtcTurk API Ayarları
+# BtcTurk ve Telegram Ayarları
 API_KEY = os.getenv("BTCTURK_PUBLIC_KEY")
 SECRET_KEY = os.getenv("BTCTURK_PRIVATE_KEY")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+def send_telegram_message(message):
+    """Telegram üzerinden anlık bildirim gönderir"""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram token veya chat ID eksik!")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload)
+    except Exception as e:
+        print(f"Telegram mesaj hatası: {e}")
 
 @app.route('/execute_trade', methods=['POST'])
 def execute_trade():
@@ -45,7 +63,15 @@ def execute_trade():
         }
 
         response = requests.post(url, headers=headers, json=payload)
-        return jsonify({"status": "completed", "btcturk_response": response.json(), "status_code": response.status_code})
+        
+        # İşlem sonucunu Telegram'a bildir
+        res_data = response.json()
+        if response.status_code == 200:
+            send_telegram_message(f"🚨 *BtcTurk İşlem Başarılı!*\nİşlem: {'Alış' if order_type==0 else 'Satış'}\nParite: {pair}")
+        else:
+            send_telegram_message(f"⚠️ *İşlem Hatası!* \nKod: {response.status_code}\nDetay: {res_data}")
+
+        return jsonify({"status": "completed", "btcturk_response": res_data, "status_code": response.status_code})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -54,43 +80,28 @@ def execute_trade():
 def home():
     return jsonify({"status": "active", "message": "CHAKO AI Trade Bot API calisiyor."})
 
-@app.route('/signal', methods=['POST'])
-def receive_signal():
-    try:
-        data = request.json or {}
-        symbol = data.get('symbol', 'BTC_TRY')
-        action = data.get('action', 'HOLD')
-        price = data.get('price', 0)
-
-        print(f"Sinyal alindi -> Sembol: {symbol}, Islem: {action}, Fiyat: {price}")
-
-        return jsonify({
-            "status": "success",
-            "message": f"Sinyal basariyla alindi: {symbol} - {action}"
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-# Arka planda periyodik calisan test dongusu (Ornek: Her 5 dakikada bir piyasa kontrolu)
+# Arka planda periyodik çalışan piyasa analiz ve test döngüsü
 def background_market_checker():
+    # Test başlangıç bildirimi
+    send_telegram_message("🟢 *CHAKO AI Bot* 3 Aylık Test Süreci Başlatıldı ve Aktif!")
+    
     while True:
         try:
-            print("Arka planda piyasa verileri kontrol ediliyor...")
-            # Burada BtcTurk public fiyat endpoint'inden anlik fiyat cekip strateji uygulayacagiz
             response = requests.get("https://api.btcturk.com/api/v2/ticker?pairSymbol=BTC_TRY")
             if response.status_code == 200:
                 data = response.json()
-                # Ornek veri okuma
                 last_price = data['data'][0]['last']
-                print(f"Guncel BTC/TRY Fiyati: {last_price}")
+                print(f"Güncel BTC/TRY Fiyatı: {last_price}")
+                
+                # Buraya kendi test strateji koşullarını ekleyebiliriz (Örn: Belirli fiyat altı/üstü alım sinyali)
+                
         except Exception as e:
             print(f"Arka plan hata: {e}")
         
-        # 5 dakikada bir kontrol et (300 saniye)
+        # Her 5 dakikada bir kontrol (300 saniye)
         time.sleep(300)
 
 if __name__ == '__main__':
-    # Arka plan is parcacigini baslat
     t = Thread(target=background_market_checker)
     t.daemon = True
     t.start()
