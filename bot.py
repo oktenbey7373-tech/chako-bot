@@ -53,6 +53,23 @@ def execute_trade():
 def home():
     return jsonify({"status": "active", "message": "CHAKO AI Trade Bot API calisiyor."})
 
+@app.route('/signal', methods=['POST'])
+def receive_signal():
+    try:
+        data = request.json or {}
+        symbol = data.get('symbol', 'BTC_TRY')
+        action = data.get('action', 'HOLD')
+        price = data.get('price', 0)
+        
+        print(f"Lovable'dan gelen sinyal -> Sembol: {symbol}, İşlem: {action}, Fiyat: {price}")
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"Sinyal başarıyla alındı: {symbol} - {action}"
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
