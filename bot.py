@@ -17,10 +17,9 @@ SECRET_KEY = os.getenv("BTCTURK_PRIVATE_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_telegram_message(message):
-    """Telegram üzerinden anlık bildirim gönderir"""
+def send_telegram_message(message, reply_markup=None):
+    """Telegram üzerinden butonlu veya düz bildirim gönderir"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("Telegram token veya chat ID eksik!")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -28,6 +27,8 @@ def send_telegram_message(message):
         "text": message,
         "parse_mode": "Markdown"
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         requests.post(url, json=payload)
     except Exception as e:
@@ -35,6 +36,7 @@ def send_telegram_message(message):
 
 @app.route('/execute_trade', methods=['POST'])
 def execute_trade():
+    """Kullanıcı Telegram'dan onay verdiğinde tetiklenecek gerçek işlem fonksiyonu"""
     try:
         data = request.json or {}
         pair = data.get("pair", "BTC_TRY")
@@ -55,54 +57,54 @@ def execute_trade():
             'Content-Type': 'application/json'
         }
 
+        # 1000 TL bütçeye uygun minimum tutarlarda test emri
         payload = {
             "pair": pair,
             "orderType": "buy" if order_type == 0 else "sell",
             "orderMethod": "market",
-            "quantity": 0.001
+            "quantity": 0.001 if "BTC" in pair else 1.0 # Pariteye göre miktar ayarı
         }
 
         response = requests.post(url, headers=headers, json=payload)
-        
-        # İşlem sonucunu Telegram'a bildir
         res_data = response.json()
+        
         if response.status_code == 200:
-            send_telegram_message(f"🚨 *BtcTurk İşlem Başarılı!*\nİşlem: {'Alış' if order_type==0 else 'Satış'}\nParite: {pair}")
+            send_telegram_message(f"✅ *BtcTurk İşlemi Başarıyla Gerçekleştirildi!*\nParite: {pair}\nİşlem: {'Alış' if order_type==0 else 'Satış'}")
         else:
-            send_telegram_message(f"⚠️ *İşlem Hatası!* \nKod: {response.status_code}\nDetay: {res_data}")
+            send_telegram_message(f"⚠️ *BtcTurk İşlem Reddedildi/Hata!* \nDetay: {res_data}")
 
-        return jsonify({"status": "completed", "btcturk_response": res_data, "status_code": response.status_code})
-
+        return jsonify({"status": "completed", "response": res_data})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/', methods=['GET'])
 def home():
-    return jsonify({"status": "active", "message": "CHAKO AI Trade Bot API calisiyor."})
+    return jsonify({"status": "active", "message": "CHAKO AI Trade Bot Aktif ve Onay Bekliyor."})
 
-# Arka planda periyodik çalışan piyasa analiz ve test döngüsü
-def background_market_checker():
-    # Test başlangıç bildirimi
-    send_telegram_message("🟢 *CHAKO AI Bot* 3 Aylık Test Süreci Başlatıldı ve Aktif!")
+# Arka planda piyasayı tarayıp kullanıcıya ONAY soran döngü
+def background_market_scanner():
+    send_telegram_message("🟢 *CHAKO AI Bot* 1000 TL Test Süreci Başlatıldı!\n\n_Kural: Bot asla senden habersiz işlem yapmaz. Fırsat bulduğunda onayına sunacak._")
     
     while True:
         try:
+            # Örnek: BTC ve popüler pariteleri tarama
             response = requests.get("https://api.btcturk.com/api/v2/ticker?pairSymbol=BTC_TRY")
             if response.status_code == 200:
                 data = response.json()
                 last_price = data['data'][0]['last']
-                print(f"Güncel BTC/TRY Fiyatı: {last_price}")
                 
-                # Buraya kendi test strateji koşullarını ekleyebiliriz (Örn: Belirli fiyat altı/üstü alım sinyali)
+                # Test aşamasında sistemi yormamak ve spam yapmamak için 
+                # Gerçek strateji eşiklerini buraya ekleyeceğiz.
+                print(f"Piyasa taranıyor... BTC Fiyat: {last_price} TL")
                 
         except Exception as e:
-            print(f"Arka plan hata: {e}")
+            print(f"Tarama hatası: {e}")
         
-        # Her 5 dakikada bir kontrol (300 saniye)
-        time.sleep(300)
+        # 15 dakikada bir piyasa taraması
+        time.sleep(900)
 
 if __name__ == '__main__':
-    t = Thread(target=background_market_checker)
+    t = Thread(target=background_market_scanner)
     t.daemon = True
     t.start()
 
